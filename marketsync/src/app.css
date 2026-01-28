@@ -9,21 +9,19 @@
 .title{font-weight:800}
 .meta{color:#6b7280;font-size:14px;margin-top:2px}
 .summary{margin-top:10px;color:#374151;font-size:14px}
-.badge{
+.scoreBadge {
   width: 52px;
   height: 52px;
-  border-radius: 9999px; /* alltid cirkel */
+  border-radius: 9999px;
   display: flex;
   align-items: center;
   justify-content: center;
-
   font-weight: 700;
-  font-size: 16px;
   line-height: 1;
-
-  /* valfritt: så det inte hoppar om texten blir "100" */
-  min-width: 52px;
+  color: white;
+  background: #22c55e; /* grön */
 }
+
 .panel{
   border:1px solid #e5e7eb;border-radius:12px;padding:12px;
 }

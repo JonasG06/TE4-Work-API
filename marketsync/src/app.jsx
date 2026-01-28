@@ -83,7 +83,8 @@ if (!res.ok) {
                     <div className="summary">{analysisById[j.id].summary}</div>
                   )}
                 </div>
-                <div className="badge">{score ?? "--"}</div>
+                <div className="scoreBadge">{score != null ? `${score}%` : "--"}</div>
+
               </div>
             );
           })}

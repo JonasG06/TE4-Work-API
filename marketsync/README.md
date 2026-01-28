@@ -1,16 +1,83 @@
-# React + Vite
+# CV → Job Match (AI-baserad jobbmatchning)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Detta projekt är ett demo-system där en användare kan klistra in sitt CV och få en lista med relevanta jobb, rankade med en matchningsprocent (0–100 %).  
+Matchningen baseras på en **helhetsbedömning med AI**, inte enbart på keyword-matching.
 
-Currently, two official plugins are available:
+Projektet är byggt som en modern webbapplikation med frontend, serverless backend och extern AI-analys.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## 🚀 Funktionalitet
+- Klistra in ett CV (fri text)
+- Sök jobb via Arbetsförmedlingens JobTech API
+- Visa jobblista med titel, företag och plats
+- Klicka på **“Analysera”** för att:
+  - jämföra CV + jobbannons
+  - få en matchningsprocent
+  - få en kort AI-baserad motivering
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🧠 Hur matchningen fungerar
+1. Jobb hämtas från **JobTech API**
+2. CV + jobbannons skickas till **Gemini (LLM)**
+3. AI:n gör en holistisk bedömning:
+   - erfarenhet
+   - rollnivå
+   - teknisk match
+   - sammanhang (inte bara ord)
+4. Resultatet returneras som JSON:
+   - `score` (0–100)
+   - `summary` (kort motivering)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## 🛠️ Teknikval
+
+### Frontend
+- **React** – komponentbaserat UI
+- **Vite** – snabb utvecklingsserver och build-tool
+
+### Backend
+- **Node.js** (serverless)
+- **Netlify Functions** – API-endpoints (`/jobs`, `/analyze`)
+
+### Externa API:er
+- **JobTech API** – verkliga svenska jobbannonser
+- **Google Gemini API** – AI-baserad matchningsanalys
+
+---
+
+## 📁 Projektstruktur
+
+TE4-Work-API/
+├── marketsync/                 # Frontend + serverless backend
+│   ├── src/                    # React-kod
+│   │   ├── App.jsx             # Huvudkomponent
+│   │   ├── App.css             # Grundläggande styling
+│   │   └── main.jsx            # React entry point
+│   │
+│   ├── public/                 # Statiska filer
+│   │
+│   ├── netlify/
+│   │   └── functions/          # Serverless API (Node.js)
+│   │       ├── jobs.mjs        # Hämtar jobb från JobTech API
+│   │       └── analyze.mjs     # AI-analys (CV ↔ jobb)
+│   │
+│   ├── .env                    # API-nycklar (ej pushad)
+│   ├── package.json            # Projektberoenden & scripts
+│   └── vite.config.js          # Vite-konfiguration
+│
+├── netlify.toml                # Netlify konfiguration
+├── .gitignore                  # Filer som inte ska pushas
+└── README.md                   # Projektdokumentation
+
+---
+
+## ▶️ Köra projektet lokalt
+
+### 1. Installera beroenden
+```bash
+cd marketsync
+npm install
+

@@ -1,3 +1,5 @@
+const CACHE = new Map();
+const TTL_MS = 10 * 60 * 1000; // 10 min
 
 export default async (req) => {
   try {
@@ -5,6 +7,11 @@ export default async (req) => {
 
     // ✅ RÄTT sätt i Netlify nya runtime:
     const { job, resumeText } = await req.json();
+
+    const key = `${job.id}::${resumeText.slice(0, 2000)}`; // räcker för demo
+const hit = CACHE.get(key);
+if (hit && (Date.now() - hit.t) < TTL_MS) return json(200, hit.v);
+
 
     if (!job || !resumeText) return json(400, { error: "Missing job or resumeText" });
 
@@ -80,13 +87,22 @@ const gemRes = await fetch(url, {
   }),
 });
 
+if (gemRes.status === 429) {
+  const details = await gemRes.text();
+  // Försök plocka ut "retry in Xs" om det finns i texten
+  const m = details.match(/retry in ([0-9.]+)s/i);
+  const retrySeconds = m ? Number(m[1]) : 30;
+
+  return json(429, { error: "Rate limited", retrySeconds, details });
+}
 
 
     
     if (!gemRes.ok) {
-      const details = await gemRes.text();
-      return json(502, { error: "Gemini failed", details });
-    }
+  const details = await gemRes.text();
+  return json(gemRes.status, { error: "Gemini failed", details });
+}
+
 
     const gemData = await gemRes.json();
 
@@ -156,6 +172,10 @@ ${text}
     });
   }
 }
+
+const value = sanitize(parsed);
+CACHE.set(key, { t: Date.now(), v: value });
+return json(200, value);
 
 // ✅ 4) om parsed finns: returnera den sanerat
 return json(200, sanitize(parsed));
