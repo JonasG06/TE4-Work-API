@@ -1,3 +1,4 @@
+
 export default async (req) => {
   try {
     if (req.method !== "POST") return json(405, { error: "Use POST" });
@@ -7,8 +8,12 @@ export default async (req) => {
 
     if (!job || !resumeText) return json(400, { error: "Missing job or resumeText" });
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+     const apiKey = process.env.GEMINI_API_KEY;
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+
+    console.log("Using model:", model);
+    console.log("API key present:", !!apiKey);
     if (!apiKey) return json(500, { error: "Missing GEMINI_API_KEY" });
 
     const prompt = `
@@ -23,9 +28,10 @@ Do NOT score purely by keyword overlap. Consider:
 - evidence of delivering similar work
 - missing requirements that matter for this role
 
-Return ONLY valid JSON with exactly these keys:
+Return ONLY a single JSON object. No markdown. No commentary. No extra text.
+Schema (must match exactly):
 {
-  "score": number,
+  "score": 0-100 integer,
   "summary": string,
   "technical_match": string[],
   "requirement_gap": string[],
@@ -33,8 +39,10 @@ Return ONLY valid JSON with exactly these keys:
 }
 
 Rules:
-- score MUST be an integer 0-100.
-- No markdown. No extra keys.
+- Output MUST start with "{" and end with "}".
+- Use Swedish for summary and lists.
+- Keep each list item short.
+- score must be integer 0-100.
 
 JOB:
 ${JSON.stringify(job)}
@@ -43,28 +51,115 @@ RESUME:
 ${resumeText}
 `.trim();
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const gemRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 700 },
-      }),
-    });
+    const modelPath = model.startsWith("models/") ? model : `models/${model}`;
+const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`;
 
+   const schema = {
+  type: "OBJECT",
+  properties: {
+    score: { type: "INTEGER" },
+    summary: { type: "STRING" },
+    technical_match: { type: "ARRAY", items: { type: "STRING" } },
+    requirement_gap: { type: "ARRAY", items: { type: "STRING" } },
+    strategic_advice: { type: "ARRAY", items: { type: "STRING" } },
+  },
+  required: ["score", "summary", "technical_match", "requirement_gap", "strategic_advice"],
+};
+
+const gemRes = await fetch(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 1200,
+      responseMimeType: "application/json",
+      responseSchema: schema
+    },
+  }),
+});
+
+
+
+    
     if (!gemRes.ok) {
       const details = await gemRes.text();
       return json(502, { error: "Gemini failed", details });
     }
 
     const gemData = await gemRes.json();
-    const text = gemData?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
 
-    const parsed = safeParseJson(text);
-    if (!parsed) return json(500, { error: "Gemini returned non-JSON", raw: text });
+// ✅ 1) Ta ALLA parts och slå ihop till en sträng
+const text = (gemData?.candidates?.[0]?.content?.parts || [])
+  .map((p) => p?.text || "")
+  .join("")
+  .trim();
 
-    return json(200, sanitize(parsed));
+// ✅ 2) Försök parsa direkt / med brace-matcher
+let parsed = safeParseJson(text);
+
+// ✅ 3) Om det inte gick: be Gemini reparera till giltig JSON
+if (!parsed) {
+  const repairPrompt = `
+You will be given a response that should be JSON but is invalid or incomplete.
+Return ONLY valid JSON matching this schema, with no extra text.
+
+Schema:
+{
+  "score": integer 0-100,
+  "summary": string,
+  "technical_match": string[],
+  "requirement_gap": string[],
+  "strategic_advice": string[]
+}
+
+Input:
+${text}
+  `.trim();
+
+  const repairRes = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: repairPrompt }] }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 800,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  if (!repairRes.ok) {
+    const details = await repairRes.text();
+    return json(502, { error: "Gemini repair failed", details, raw: text });
+  }
+
+  const repairData = await repairRes.json();
+  const repairedText = (repairData?.candidates?.[0]?.content?.parts || [])
+    .map((p) => p?.text || "")
+    .join("")
+    .trim();
+
+  parsed = safeParseJson(repairedText);
+
+  if (!parsed) {
+    // fortfarande inte JSON: skicka tillbaka raw så ni kan se i UI
+    return json(200, {
+      score: 50,
+      summary: "Kunde inte tolka AI-svaret som JSON. Försök igen.",
+      technical_match: [],
+      requirement_gap: [],
+      strategic_advice: [],
+      raw: repairedText || text,
+    });
+  }
+}
+
+// ✅ 4) om parsed finns: returnera den sanerat
+return json(200, sanitize(parsed));
+
   } catch (e) {
     return json(500, { error: "Server error", details: String(e) });
   }
@@ -78,11 +173,36 @@ function json(status, obj) {
 }
 
 function safeParseJson(s) {
-  const a = s.indexOf("{");
-  const b = s.lastIndexOf("}");
-  if (a < 0 || b < 0 || b <= a) return null;
-  try { return JSON.parse(s.slice(a, b + 1)); } catch { return null; }
+  if (!s) return null;
+
+  // 1) Försök direkt
+  try {
+    return JSON.parse(s);
+  } catch {}
+
+  // 2) Om svaret innehåller extra text, plocka ut första kompletta JSON-objektet
+  const start = s.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "{") depth++;
+    if (ch === "}") depth--;
+    if (depth === 0) {
+      const candidate = s.slice(start, i + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  // Om vi kommer hit: JSON blev avklippt och saknar sista "}"
+  return null;
 }
+
 
 function sanitize(o) {
   return {

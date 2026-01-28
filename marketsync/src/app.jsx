@@ -27,7 +27,21 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job, resumeText: cv }),
       });
-      const data = await res.json();
+      const text = await res.text();
+let data;
+try {
+  data = JSON.parse(text);
+} catch {
+  console.error("Non-JSON from server:", text);
+  alert("Servern kraschade och returnerade inte JSON. Kolla terminalen.");
+  return;
+}
+
+if (!res.ok) {
+  alert("Analyze error: " + JSON.stringify(data));
+  return;
+}
+
       setAnalysisById(prev => ({ ...prev, [job.id]: data }));
     } finally {
       setLoading(false);
