@@ -48,6 +48,7 @@ Projektet är byggt som en modern webbapplikation med frontend, serverless backe
 
 ---
 
+```
 ## 📁 Projektstruktur
 
 TE4-Work-API/
@@ -71,7 +72,7 @@ TE4-Work-API/
 ├── netlify.toml                # Netlify konfiguration
 ├── .gitignore                  # Filer som inte ska pushas
 └── README.md                   # Projektdokumentation
-
+```
 ---
 
 ## ▶️ Köra projektet lokalt
